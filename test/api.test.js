@@ -104,6 +104,7 @@ test('사진 첨부로 체크, 교체, 취소', async () => {
   kimPrayerId = r.data.checks.prayer.id;
   r = await kim.call('POST', '/api/me/checks/prayer', photoForm(today)); // 교체
   assert.equal(r.data.checks.prayer.id, kimPrayerId);
+  await new Promise((r) => setTimeout(r, 150));
   assert.equal(fs.readdirSync(path.join(dataDir, 'photos', String(kimId))).length, 2); // 원본+썸네일만 남음
   await kim.call('POST', '/api/me/checks/word', photoForm(today));
   r = await kim.call('DELETE', '/api/me/checks/word', { date: today });
