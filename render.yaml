@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: hwajung
+    runtime: node
+    plan: starter
+    buildCommand: npm ci --omit=dev
+    startCommand: node src/server.js
+    envVars:
+      - key: DATA_DIR
+        value: /var/data
+      - key: NODE_VERSION
+        value: "22"
+    disk:
+      name: hwajung-data
+      mountPath: /var/data
+      sizeGB: 5

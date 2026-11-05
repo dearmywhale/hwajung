@@ -1,0 +1,10 @@
+{
+  "name": "화정 찬양부",
+  "short_name": "화정 찬양부",
+  "description": "하늘 습관으로 무장하자",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#f6f1e4",
+  "theme_color": "#355e45",
+  "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

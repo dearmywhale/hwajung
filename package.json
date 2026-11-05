@@ -1,0 +1,19 @@
+{
+  "name": "hwajung-praise",
+  "version": "1.0.0",
+  "private": true,
+  "description": "화정 찬양부 - 하늘 습관으로 무장하자 (팀 관리 · 매일 실천 체크)",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "express": "^4.22.3",
+    "multer": "^2.5.0"
+  }
+}
