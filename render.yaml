@@ -3,7 +3,7 @@ services:
     name: hwajung
     runtime: node
     plan: starter
-    buildCommand: npm ci --omit=dev
+    buildCommand: npm install --omit=dev
     startCommand: node src/server.js
     envVars:
       - key: DATA_DIR
