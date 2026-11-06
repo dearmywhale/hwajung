@@ -126,8 +126,8 @@ a { color: var(--accent-ink); }
 .side-brand img { width: 40px; height: 40px; flex: none; border-radius: 10px; }
 .side-brand .t { font-family: var(--font-title); font-size: 20px; font-weight: 700; line-height: 1.2; color: var(--on-primary); }
 .side-brand .s { font-family: var(--font-title); font-size: 13px; color: #6b4e12; }
-.side-user { padding: 14px 8px; font-size: 13px; color: #5c4614; border-bottom: 1px solid rgba(58,44,10,.15); }
-.side-user b { color: var(--on-primary); font-size: 15px; font-weight: 500; }
+.side-user { margin: 14px 0 2px; padding: 12px 14px; font-size: 13px; color: var(--muted); background: var(--surface); border-radius: 12px; box-shadow: 0 1px 3px rgba(58,44,10,.12); }
+.side-user b { color: var(--title); font-size: 15px; font-weight: 500; }
 .nav { display: flex; flex-direction: column; gap: 2px; padding: 12px 0; flex: 1 0 auto; }
 .nav-label { font-size: 11px; letter-spacing: .08em; color: #7a5a1a; padding: 12px 10px 4px; }
 .nav a {
@@ -392,4 +392,4 @@ button.mark { cursor: zoom-in; }
 @media (max-width: 860px) {
   .photo-box:not(.filled) { aspect-ratio: 16 / 7; }
 }
-.user-list > .card, .team-grid > .card { margin-top: 0; }
+.user-list > .card, .team-grid > .card, .check-grid > .card { margin-top: 0; }
