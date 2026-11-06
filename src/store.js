@@ -8,8 +8,27 @@ const { Readable } = require('stream');
 
 class ConfigError extends Error {}
 
+// 연결 정보 찾기: 기본 이름이 없으면 접두어가 붙은 이름(예: STORAGE_DATABASE_URL)도 찾는다
+function findEnv(preferred, test) {
+  for (const k of preferred) if (process.env[k]) return process.env[k];
+  const keys = Object.keys(process.env).sort();
+  for (const k of keys) if (test(k, process.env[k] || '')) return process.env[k];
+  return '';
+}
+
 function databaseUrl() {
-  return process.env.DATABASE_URL || process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL || '';
+  return findEnv(
+    ['DATABASE_URL', 'POSTGRES_URL', 'POSTGRES_PRISMA_URL'],
+    (k, v) => /^postgres(ql)?:\/\//.test(v) && /(DATABASE_URL|POSTGRES_URL)$/.test(k) && !/UNPOOLED|NON_POOLING/.test(k)
+  ) || findEnv([], (k, v) => /^postgres(ql)?:\/\//.test(v) && /_URL$/.test(k));
+}
+
+function blobToken() {
+  return findEnv(['BLOB_READ_WRITE_TOKEN'], (k, v) => /READ_WRITE_TOKEN$/.test(k) && /^vercel_blob_rw_/.test(v));
+}
+
+function envLabel() {
+  return process.env.VERCEL_ENV ? ` (현재 배포 환경: ${process.env.VERCEL_ENV})` : '';
 }
 
 async function openPostgres(url) {
@@ -76,17 +95,17 @@ async function openDatabase({ dataDir }) {
   const url = databaseUrl();
   if (url) return openPostgres(url);
   if (process.env.VERCEL) {
-    throw new ConfigError('데이터베이스가 연결되지 않았습니다. Vercel 프로젝트의 Storage 탭에서 Neon(Postgres) 데이터베이스를 연결한 뒤 다시 배포해 주세요.');
+    throw new ConfigError('데이터베이스가 연결되지 않았습니다. Vercel 프로젝트의 Storage 탭에서 Neon(Postgres) 데이터베이스를 연결한 뒤 다시 배포해 주세요.' + envLabel());
   }
   return openPglite(dataDir === ':memory:' ? ':memory:' : path.join(dataDir, 'pgdata'));
 }
 
 // ---------- 사진 저장소 ----------
 function openPhotoStore({ dataDir }) {
-  const token = process.env.BLOB_READ_WRITE_TOKEN;
+  const token = blobToken();
   if (token) return blobStore(token);
   if (process.env.VERCEL) {
-    const err = () => { throw new ConfigError('사진 저장소가 연결되지 않았습니다. 관리자에게 문의해 주세요. (Vercel Storage 탭에서 Blob 저장소 연결 필요)'); };
+    const err = () => { throw new ConfigError('사진 저장소가 연결되지 않았습니다. 관리자에게 문의해 주세요. (Vercel Storage 탭에서 Blob 저장소 연결 필요)' + envLabel()); };
     return { kind: 'missing', put: err, open: err, remove: async () => {} };
   }
   return diskStore(path.join(dataDir, 'photos'));

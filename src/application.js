@@ -28,7 +28,13 @@ function createApp(options = {}) {
     if (!readyPromise) {
       readyPromise = (async () => {
         const db = await openDatabase({ dataDir });
-        await migrate(db);
+        try {
+          await migrate(db);
+        } catch (e) {
+          console.error('database connection failed', e);
+          await Promise.resolve(db.close()).catch(() => {});
+          throw new ConfigError(`데이터베이스에 접속하지 못했습니다 (${e.code || e.name || '오류'}). Vercel Storage 탭에서 Neon 연결 상태를 확인해 주세요.`);
+        }
         const seedName = cleanName(process.env.ADMIN_NAME || '');
         const seedPin = process.env.ADMIN_PIN || '';
         if (seedName && isValidPin(seedPin)) {
