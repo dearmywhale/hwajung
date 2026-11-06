@@ -1,7 +1,7 @@
 # 화정 찬양부 — 하늘 습관으로 무장하자
 
 찬양부 팀 관리와 매일 실천 체크(**천국 한걸음**)를 위한 웹 사이트입니다.
-여러 사람이 각자 휴대폰·PC에서 접속해도 계정·체크·사진이 서버 한 곳에 저장되어 공유됩니다.
+여러 사람이 각자 휴대폰·PC에서 접속해도 계정·체크·사진이 한 곳에 저장되어 공유됩니다.
 
 ## 주요 기능
 
@@ -15,45 +15,53 @@
 - **팀 관리**: 추가 · 수정 · 삭제 · 복구, 카드에서 소속 성도 확인, + 버튼으로 기존 성도 여러 명 추가 또는 새 성도 등록
 - **사진 확인**: 성도별·날짜별·항목별 사진 목록, 기간 조회, 확대 보기
 
-사진은 본인과 관리자만 서버에서 열람할 수 있도록 권한을 검사합니다. 일반 성도는 관리 메뉴와 관리자 API에 접근할 수 없습니다.
+사진은 본인과 관리자만 열람할 수 있도록 서버에서 권한을 검사합니다. 일반 성도는 관리 메뉴와 관리자 API에 접근할 수 없습니다.
 
-## 실행하기
+## Vercel에 배포하기
 
-Node.js 18 이상이 필요합니다.
+Vercel은 파일을 저장해 두지 못하므로, **데이터베이스(Neon)** 와 **사진 저장소(Blob)** 를 Vercel 프로젝트에 연결해야 합니다.
+
+1. Vercel 프로젝트 → **Storage** 탭 → **Create Database** → **Neon (Serverless Postgres)** 를 선택해 만들고 이 프로젝트에 연결합니다.
+   (`DATABASE_URL` 환경 변수가 자동으로 추가됩니다.)
+2. 같은 **Storage** 탭 → **Create** → **Blob** 을 선택해 만들고 이 프로젝트에 연결합니다. 접근 방식을 고를 수 있으면 **Private** 를 선택하세요.
+   (`BLOB_READ_WRITE_TOKEN` 환경 변수가 자동으로 추가됩니다.)
+3. **Deployments** 탭에서 최신 배포의 **⋯ → Redeploy** 를 눌러 다시 배포합니다.
+4. 사이트 주소에 접속해 **가장 먼저 관리자 계정을 만듭니다.** (처음 접속한 사람이 관리자가 됩니다.)
+
+설정 파일은 `vercel.json`, 서버 함수는 `api/index.js` 입니다. 화면 파일은 `public/` 에서 바로 제공됩니다.
+사진은 휴대폰에서 줄여서 올리며, 한 장 최대 4MB입니다.
+
+## 내 컴퓨터에서 실행하기
+
+Node.js 20 이상이 필요합니다.
 
 ```bash
 npm install
 npm start          # http://localhost:3000
 ```
 
-처음 접속하면 **관리자 계정 만들기** 화면이 나옵니다. 여기서 만든 계정이 첫 관리자입니다.
-(또는 서버를 처음 시작할 때 환경 변수 `ADMIN_NAME`, `ADMIN_PIN`을 지정하면 그 계정이 자동으로 만들어집니다.)
+환경 변수가 없으면 내장 데이터베이스(PGlite)와 사진 폴더를 `DATA_DIR`(기본 `./data`)에 저장합니다.
+`DATABASE_URL`, `BLOB_READ_WRITE_TOKEN` 을 지정하면 Vercel과 같은 저장소를 사용합니다.
 
-| 환경 변수 | 설명 | 기본값 |
-| --- | --- | --- |
-| `PORT` | 서버 포트 | `3000` |
-| `DATA_DIR` | 데이터베이스(SQLite)와 사진이 저장되는 폴더 | `./data` |
-| `ADMIN_NAME`, `ADMIN_PIN` | (선택) 첫 관리자 자동 생성 | 없음 |
+| 환경 변수 | 설명 |
+| --- | --- |
+| `DATABASE_URL` (또는 `POSTGRES_URL`) | Postgres 연결 주소 (Neon 등) |
+| `BLOB_READ_WRITE_TOKEN` | Vercel Blob 토큰 |
+| `DATA_DIR` | 위 둘이 없을 때 데이터 저장 폴더 (기본 `./data`) |
+| `ADMIN_NAME`, `ADMIN_PIN` | (선택) 첫 관리자 자동 생성 |
+| `PORT` | 서버 포트 (기본 `3000`) |
 
-모든 데이터는 `DATA_DIR` 폴더 하나에 들어 있습니다. **이 폴더를 정기적으로 백업**해 주세요.
-
-## 인터넷에 배포하기
-
-데이터가 디스크에 저장되므로, **영구 디스크(볼륨)를 붙일 수 있는 곳**에 배포해야 합니다.
-
-- **Render**: 이 저장소를 연결하고 *Blueprint*로 배포하면 `render.yaml` 설정(영구 디스크 포함)이 적용됩니다. 영구 디스크는 유료 플랜(Starter)부터 사용할 수 있습니다.
-- **Fly.io / Railway 등**: 포함된 `Dockerfile`로 배포하고, 볼륨을 `/data`에 연결하세요.
-- **교회 PC·서버**: `npm start`로 실행하고 공유기 포트포워딩이나 Cloudflare Tunnel 등으로 연결할 수 있습니다.
-
-HTTPS 주소로 접속하면 로그인 쿠키가 안전하게(Secure) 저장됩니다.
+`Dockerfile` 과 `render.yaml` 로 Render · Railway · Fly.io 같은 일반 서버에 배포할 수도 있습니다. 이때는 영구 디스크를 붙이거나 위 환경 변수를 지정하세요.
 
 ## 개발
 
 ```bash
-npm test           # API 테스트
+npm test           # API 테스트 (내장 DB 사용, DATABASE_URL 을 주면 그 DB로 테스트)
 ```
 
-- `src/server.js` — API 서버 (Express)
-- `src/db.js` — SQLite 스키마, 팀 소속 이력 관리
+- `src/application.js` — API 서버 (Express)
+- `src/store.js` — 데이터베이스 · 사진 저장소 연결
+- `src/db.js` — 스키마, 팀 소속 이력 관리
 - `src/stats.js` — 달성률 계산, CSV
+- `src/local.js` — 로컬 실행용 / `api/index.js` — Vercel 함수
 - `public/` — 화면 (HTML · CSS · JavaScript, 빌드 과정 없음)

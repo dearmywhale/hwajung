@@ -6,6 +6,7 @@
   const SHORT = { prayer: '기', weclick: '위', word: '말' };
   const ICON = { prayer: '🙏', weclick: '👆', word: '📖' };
   const DOW = ['일', '월', '화', '수', '목', '금', '토'];
+  const MAX_UPLOAD = 3.9 * 1024 * 1024;
 
   const state = {
     me: null,
@@ -217,11 +218,15 @@
     if (!file.type.startsWith('image/') && !/\.(heic|heif)$/i.test(file.name)) throw new Error('사진 파일만 첨부할 수 있습니다.');
     try {
       const { img, url } = await loadImage(file);
-      const photo = (await toJpeg(img, 1600, 0.85)) || file;
+      let photo = await toJpeg(img, 1600, 0.82);
+      if (photo && photo.size > MAX_UPLOAD) photo = await toJpeg(img, 1200, 0.7);
+      if (!photo) photo = file;
+      if (photo.size > MAX_UPLOAD) throw new Error('사진 용량이 너무 큽니다. 다른 사진을 선택해 주세요.');
       const thumb = await toJpeg(img, 480, 0.8);
       return { photo, thumb, previewUrl: url };
     } catch (e) {
-      if (file.size > 15 * 1024 * 1024) throw new Error('사진 용량이 너무 큽니다 (최대 15MB).');
+      if (e.message.includes('용량')) throw e;
+      if (file.size > MAX_UPLOAD) throw new Error('사진 용량이 너무 큽니다 (최대 4MB). 다른 사진을 선택해 주세요.');
       return { photo: file, thumb: null, previewUrl: null };
     }
   }

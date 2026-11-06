@@ -31,15 +31,16 @@ function effectiveRange(start, end) {
   return { start, end, effEnd, today, dates: dateRange(start, effEnd) };
 }
 
-function loadPeriod(db, start, effEnd, teamId) {
+async function loadPeriod(db, start, effEnd, teamId) {
   const params = [effEnd, start];
   let sql = `SELECT m.*, u.name AS user_name, t.name AS team_name, t.deleted_at AS team_deleted
              FROM memberships m JOIN users u ON u.id = m.user_id JOIN teams t ON t.id = m.team_id
-             WHERE m.start_date <= ? AND (m.end_date IS NULL OR m.end_date >= ?)`;
-  if (teamId != null) { sql += ' AND m.team_id = ?'; params.push(teamId); }
-  const memberships = start <= effEnd ? db.prepare(sql).all(...params) : [];
+             WHERE m.start_date <= $1 AND (m.end_date IS NULL OR m.end_date >= $2)`;
+  if (teamId != null) { sql += ' AND m.team_id = $3'; params.push(teamId); }
+  sql += ' ORDER BY m.id';
+  const memberships = start <= effEnd ? await db.query(sql, params) : [];
   const checks = start <= effEnd
-    ? db.prepare('SELECT id, user_id, date, item FROM checks WHERE date >= ? AND date <= ?').all(start, effEnd)
+    ? await db.query('SELECT id, user_id, date, item FROM checks WHERE date >= $1 AND date <= $2', [start, effEnd])
     : [];
   const checkMap = new Map(); // `${user}|${date}` -> {item: id}
   for (const c of checks) {
@@ -54,11 +55,11 @@ function membershipDays(m, start, effEnd) {
   return dateRange(maxDate(m.start_date, start), minDate(m.end_date || effEnd, effEnd));
 }
 
-function overview(db, start, end) {
+async function overview(db, start, end) {
   const r = effectiveRange(start, end);
-  const { memberships, checkMap } = loadPeriod(db, start, r.effEnd, null);
+  const { memberships, checkMap } = await loadPeriod(db, start, r.effEnd, null);
   const teams = new Map();
-  for (const t of db.prepare('SELECT id, name, deleted_at FROM teams WHERE deleted_at IS NULL ORDER BY id').all()) {
+  for (const t of await db.query('SELECT id, name, deleted_at FROM teams WHERE deleted_at IS NULL ORDER BY id')) {
     teams.set(t.id, { id: t.id, name: t.name, deleted: false, agg: emptyAgg(), members: new Set() });
   }
   const all = emptyAgg();
@@ -84,11 +85,11 @@ function overview(db, start, end) {
   };
 }
 
-function teamDetail(db, teamId, start, end) {
-  const team = db.prepare('SELECT id, name, deleted_at FROM teams WHERE id = ?').get(teamId);
+async function teamDetail(db, teamId, start, end) {
+  const [team] = await db.query('SELECT id, name, deleted_at FROM teams WHERE id = $1', [teamId]);
   if (!team) return null;
   const r = effectiveRange(start, end);
-  const { memberships, checkMap } = loadPeriod(db, start, r.effEnd, teamId);
+  const { memberships, checkMap } = await loadPeriod(db, start, r.effEnd, teamId);
   const daily = new Map(r.dates.map((d) => [d, { date: d, members: 0, done: { prayer: 0, weclick: 0, word: 0 }, allDone: 0 }]));
   const members = new Map();
   const teamAgg = emptyAgg();
@@ -125,8 +126,8 @@ function csvCell(v) {
 
 function pct(v) { return v == null ? '-' : v + '%'; }
 
-function statsCsv(db, start, end) {
-  const ov = overview(db, start, end);
+async function statsCsv(db, start, end) {
+  const ov = await overview(db, start, end);
   const rows = [];
   rows.push(['화정 찬양부 통계', `${start} ~ ${end}`, `집계 ${ov.days}일 (미래 날짜 제외)`]);
   rows.push([]);
@@ -139,7 +140,8 @@ function statsCsv(db, start, end) {
   rows.push(line('찬양부 전체', ov.overall));
   rows.push([]);
 
-  const details = ov.teams.map((t) => ({ t, d: teamDetail(db, t.id, start, end) }));
+  const details = [];
+  for (const t of ov.teams) details.push({ t, d: await teamDetail(db, t.id, start, end) });
   rows.push(['[성도별 달성률]']);
   rows.push(['팀', '성도', '체크 기회(일)', '기도', '위클릭', '3분말씀', '기도 달성률', '위클릭 달성률', '3분말씀 달성률', '전체 달성률']);
   for (const { t, d } of details) {

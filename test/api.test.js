@@ -4,7 +4,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { createApp } = require('../src/server');
+const { createApp } = require('../src/application');
 const { kstToday, addDays } = require('../src/util');
 
 // 1x1 JPEG
@@ -15,11 +15,11 @@ let server, base, dataDir, db;
 before(async () => {
   dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'hwajung-test-'));
   const app = createApp({ dataDir });
-  db = app.locals.db;
+  db = (await app.locals.ready()).db;
   await new Promise((r) => { server = app.listen(0, r); });
   base = `http://127.0.0.1:${server.address().port}`;
 });
-after(() => { server.close(); fs.rmSync(dataDir, { recursive: true, force: true }); });
+after(async () => { server.close(); await db.close(); fs.rmSync(dataDir, { recursive: true, force: true }); });
 
 function client() {
   let cookie = '';
@@ -104,8 +104,7 @@ test('사진 첨부로 체크, 교체, 취소', async () => {
   kimPrayerId = r.data.checks.prayer.id;
   r = await kim.call('POST', '/api/me/checks/prayer', photoForm(today)); // 교체
   assert.equal(r.data.checks.prayer.id, kimPrayerId);
-  await new Promise((r) => setTimeout(r, 150));
-  assert.equal(fs.readdirSync(path.join(dataDir, 'photos', String(kimId))).length, 2); // 원본+썸네일만 남음
+  assert.equal(fs.readdirSync(path.join(dataDir, 'photos', 'photos', String(kimId))).length, 2); // 원본+썸네일만 남음
   await kim.call('POST', '/api/me/checks/word', photoForm(today));
   r = await kim.call('DELETE', '/api/me/checks/word', { date: today });
   assert.equal(r.data.checks.word, null);
@@ -125,11 +124,11 @@ test('사진은 본인과 관리자만 열람', async () => {
 test('달성률: 실제 소속 기간 기준, 미래 날짜 제외', async () => {
   // 과거 이력 직접 구성: 이성도는 7일 전~3일 전 2팀, 2일 전부터 1팀
   const d = (n) => addDays(today, n);
-  db.prepare('DELETE FROM memberships WHERE user_id = ?').run(leeId);
-  db.prepare('INSERT INTO memberships (user_id, team_id, start_date, end_date) VALUES (?, ?, ?, ?)').run(leeId, teamB, d(-6), d(-3));
-  db.prepare('INSERT INTO memberships (user_id, team_id, start_date) VALUES (?, ?, ?)').run(leeId, teamA, d(-2));
+  await db.query('DELETE FROM memberships WHERE user_id = $1', [leeId]);
+  await db.query('INSERT INTO memberships (user_id, team_id, start_date, end_date) VALUES ($1, $2, $3, $4)', [leeId, teamB, d(-6), d(-3)]);
+  await db.query('INSERT INTO memberships (user_id, team_id, start_date) VALUES ($1, $2, $3)', [leeId, teamA, d(-2)]);
   for (const [date, item] of [[d(-6), 'prayer'], [d(-6), 'weclick'], [d(-6), 'word'], [d(-1), 'prayer'], [d(-10), 'prayer']]) {
-    db.prepare("INSERT INTO checks (user_id, date, item, photo, mime) VALUES (?, ?, ?, 'x.jpg', 'image/jpeg')").run(leeId, date, item);
+    await db.query("INSERT INTO checks (user_id, date, item, photo, mime) VALUES ($1, $2, $3, 'file:x.jpg', 'image/jpeg')", [leeId, date, item]);
   }
   const start = d(-6);
   const end = d(3); // 미래 포함
@@ -169,7 +168,7 @@ test('달성률: 실제 소속 기간 기준, 미래 날짜 제외', async () =>
 
 test('팀 이동 시 이전 이력 유지', async () => {
   await admin.call('PUT', `/api/admin/users/${leeId}/team`, { teamId: teamB });
-  const rows = db.prepare('SELECT * FROM memberships WHERE user_id = ? ORDER BY id').all(leeId);
+  const rows = await db.query('SELECT * FROM memberships WHERE user_id = $1 ORDER BY id', [leeId]);
   assert.equal(rows.length, 3);
   assert.equal(rows[1].team_id, teamA);
   assert.equal(rows[1].end_date, addDays(today, -1));
@@ -212,9 +211,8 @@ test('성도 삭제 시 계정·기록·사진 영구 삭제', async () => {
   const me = (await admin.call('GET', '/api/me')).data.user;
   assert.equal((await admin.call('DELETE', `/api/admin/users/${me.id}`)).status, 400);
   assert.equal((await admin.call('DELETE', `/api/admin/users/${kimId}`)).status, 200);
-  assert.equal(db.prepare('SELECT COUNT(*) n FROM checks WHERE user_id = ?').get(kimId).n, 0);
-  assert.equal(db.prepare('SELECT COUNT(*) n FROM users WHERE id = ?').get(kimId).n, 0);
-  await new Promise((r) => setTimeout(r, 100));
-  assert.equal(fs.existsSync(path.join(dataDir, 'photos', String(kimId))), false);
+  assert.equal((await db.query('SELECT COUNT(*)::int n FROM checks WHERE user_id = $1', [kimId]))[0].n, 0);
+  assert.equal((await db.query('SELECT COUNT(*)::int n FROM users WHERE id = $1', [kimId]))[0].n, 0);
+  assert.deepEqual(fs.readdirSync(path.join(dataDir, 'photos', 'photos', String(kimId))), []);
   assert.equal((await admin.call('GET', `/api/photos/${kimPrayerId}`)).status, 404);
 });
