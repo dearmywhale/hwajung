@@ -31,11 +31,23 @@ function envLabel() {
   return process.env.VERCEL_ENV ? ` (현재 배포 환경: ${process.env.VERCEL_ENV})` : '';
 }
 
+function normalizeSslMode(url) {
+  try {
+    const u = new URL(url);
+    const mode = (u.searchParams.get('sslmode') || '').toLowerCase();
+    if (['prefer', 'require', 'verify-ca'].includes(mode)) {
+      u.searchParams.set('sslmode', 'verify-full');
+      return u.toString();
+    }
+  } catch (e) { /* 주소 형식이 특이하면 그대로 사용 */ }
+  return url;
+}
+
 async function openPostgres(url) {
   const { Pool } = require('pg');
   const pool = new Pool({
     // Neon 주소의 sslmode=require 를 현재와 같은 동작(인증서 확인)인 verify-full 로 명시 → 경고 제거
-    connectionString: url.replace(/([?&]sslmode=)(prefer|require|verify-ca)(?=&|$)/, '$1verify-full'),
+    connectionString: normalizeSslMode(url),
     max: process.env.VERCEL ? 3 : 10,
     idleTimeoutMillis: 10000,
   });
