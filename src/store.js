@@ -34,7 +34,8 @@ function envLabel() {
 async function openPostgres(url) {
   const { Pool } = require('pg');
   const pool = new Pool({
-    connectionString: url, // Neon 주소에는 sslmode=require 가 들어 있어 암호화 연결을 사용
+    // Neon 주소의 sslmode=require 를 현재와 같은 동작(인증서 확인)인 verify-full 로 명시 → 경고 제거
+    connectionString: url.replace(/([?&]sslmode=)(prefer|require|verify-ca)(?=&|$)/, '$1verify-full'),
     max: process.env.VERCEL ? 3 : 10,
     idleTimeoutMillis: 10000,
   });
