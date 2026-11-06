@@ -405,8 +405,8 @@
             <div class="msg">${esc(msg)}</div>
           </div>
           <div class="ring" aria-label="오늘 ${n}개 완료">
-            <svg viewBox="0 0 76 76"><circle cx="38" cy="38" r="32" stroke="rgba(255,255,255,.2)" stroke-width="7" fill="none"/>
-            <circle cx="38" cy="38" r="32" stroke="#e2c98a" stroke-width="7" fill="none" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - n / 3)}"/></svg>
+            <svg viewBox="0 0 76 76"><circle cx="38" cy="38" r="32" stroke="rgba(58,44,10,.14)" stroke-width="7" fill="none"/>
+            <circle cx="38" cy="38" r="32" stroke="#6b4e12" stroke-width="7" fill="none" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - n / 3)}"/></svg>
             <div class="num">${n}/3</div>
           </div>
         </section>
@@ -761,7 +761,7 @@
               <td><button class="btn icon sm ghost" data-cam="${m.userId}" title="${esc(m.name)} 사진 보기" aria-label="${esc(m.name)} 사진 보기">📷</button></td>
             </tr>`).join('')}</tbody>
           </table></div>
-          <p class="calc-note">기 = 기도 · 위 = 위클릭 · 말 = 3분말씀 · 초록 칸을 누르면 사진을 볼 수 있어요. 합계는 선택한 전체 기간 기준입니다. 빈 점(·)은 그날 이 팀 소속이 아니었던 날이에요.</p>`
+          <p class="calc-note">기 = 기도 · 위 = 위클릭 · 말 = 3분말씀 · 색칠된 칸을 누르면 사진을 볼 수 있어요. 합계는 선택한 전체 기간 기준입니다. 빈 점(·)은 그날 이 팀 소속이 아니었던 날이에요.</p>`
           : '<div class="card empty">이 기간에 소속된 성도가 없어요.</div>'}
         </div>`}`;
       bindPeriodBar(ctx.view, () => route());
