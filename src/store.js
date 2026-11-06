@@ -1,7 +1,7 @@
 'use strict';
 // 데이터베이스와 사진 저장소 연결
 // - DATABASE_URL(또는 POSTGRES_URL)이 있으면 Postgres(Neon 등), 없으면 내장 Postgres(PGlite)를 DATA_DIR 에 저장
-// - BLOB_READ_WRITE_TOKEN 이 있으면 Vercel Blob, 없으면 DATA_DIR/photos 폴더에 저장
+// - 사진: R2_* 환경 변수가 있으면 Cloudflare R2, 없으면 Vercel Blob(BLOB_READ_WRITE_TOKEN), 둘 다 없으면 DATA_DIR/photos 폴더
 const fs = require('fs');
 const path = require('path');
 const { Readable } = require('stream');
@@ -114,14 +114,89 @@ async function openDatabase({ dataDir }) {
 }
 
 // ---------- 사진 저장소 ----------
+// Cloudflare R2 설정 (S3 호환 API)
+const R2_VARS = ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET'];
+function r2Config() {
+  const v = Object.fromEntries(R2_VARS.map((k) => [k, (process.env[k] || '').trim()]));
+  const missing = R2_VARS.filter((k) => !v[k] && !(k === 'R2_ACCOUNT_ID' && process.env.R2_ENDPOINT));
+  const anySet = R2_VARS.some((k) => v[k]) || !!process.env.R2_ENDPOINT;
+  if (!anySet) return null;
+  const endpoint = (process.env.R2_ENDPOINT || `https://${v.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`).replace(/\/+$/, '');
+  return { missing, endpoint, accessKeyId: v.R2_ACCESS_KEY_ID, secretAccessKey: v.R2_SECRET_ACCESS_KEY, bucket: v.R2_BUCKET };
+}
+
+// 새 사진은 R2 → (없으면) Vercel Blob → (로컬) 폴더 순으로 저장하고,
+// 이미 저장된 사진은 주소 앞부분(r2: / blob- / file:)을 보고 해당 저장소에서 읽는다.
 function openPhotoStore({ dataDir }) {
+  const r2cfg = r2Config();
+  const r2Incomplete = r2cfg && r2cfg.missing.length
+    ? new ConfigError(`사진 저장소(Cloudflare R2) 설정이 덜 되었습니다. Vercel 환경 변수에 ${r2cfg.missing.join(', ')} 를 추가한 뒤 다시 배포해 주세요.` + envLabel())
+    : null;
+  const r2 = r2cfg && !r2Incomplete ? r2Store(r2cfg) : null;
   const token = blobToken();
-  if (token) return blobStore(token);
-  if (process.env.VERCEL) {
-    const err = () => { throw new ConfigError('사진 저장소가 연결되지 않았습니다. 관리자에게 문의해 주세요. (Vercel Storage 탭에서 Blob 저장소 연결 필요)' + envLabel()); };
-    return { kind: 'missing', put: err, open: err, remove: async () => {} };
+  const blob = token ? blobStore(token) : null;
+  const disk = process.env.VERCEL ? null : diskStore(path.join(dataDir, 'photos'));
+  const primary = r2 || blob || disk;
+  const pick = (ref) => {
+    if (/^r2:/.test(ref)) return r2;
+    if (/^file:/.test(ref)) return disk;
+    return blob; // blob-private:/blob-public:/예전 주소
+  };
+  return {
+    kind: primary ? primary.kind : 'missing',
+    async put(key, buf, contentType) {
+      if (r2Incomplete) throw r2Incomplete;
+      if (!primary) throw new ConfigError('사진 저장소가 연결되지 않았습니다. 관리자에게 문의해 주세요. (Cloudflare R2 환경 변수 설정 필요)' + envLabel());
+      return primary.put(key, buf, contentType);
+    },
+    async open(ref) {
+      const store = ref && pick(ref);
+      return store ? store.open(ref) : null;
+    },
+    async remove(refs) {
+      for (const ref of refs.filter(Boolean)) {
+        const store = pick(ref);
+        if (store) await store.remove([ref]);
+      }
+    },
+  };
+}
+
+function r2Store({ endpoint, accessKeyId, secretAccessKey, bucket }) {
+  const { AwsClient } = require('aws4fetch');
+  const client = new AwsClient({ accessKeyId, secretAccessKey, service: 's3', region: 'auto' });
+  const urlFor = (key) => `${endpoint}/${encodeURIComponent(bucket)}/${key.split('/').map(encodeURIComponent).join('/')}`;
+  const keyOf = (ref) => ref.replace(/^r2:/, '');
+  async function failure(res, action) {
+    const body = await res.text().catch(() => '');
+    const code = (/<Code>([^<]+)<\/Code>/.exec(body) || [])[1] || '';
+    console.error(`R2 ${action} failed`, res.status, code, body.slice(0, 300));
+    if (res.status === 401 || res.status === 403 || code === 'InvalidAccessKeyId' || code === 'SignatureDoesNotMatch') {
+      return new ConfigError('사진 저장소(Cloudflare R2) 접근이 거부되었습니다. R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY 값과 토큰 권한(읽기·쓰기)을 확인해 주세요.');
+    }
+    if (code === 'NoSuchBucket') return new ConfigError(`R2 버킷 '${bucket}'을(를) 찾을 수 없습니다. R2_BUCKET 이름과 R2_ACCOUNT_ID를 확인해 주세요.`);
+    return new Error(`R2 ${action} failed: ${res.status} ${code}`);
   }
-  return diskStore(path.join(dataDir, 'photos'));
+  return {
+    kind: 'r2',
+    async put(key, buf, contentType) {
+      const res = await client.fetch(urlFor(key), { method: 'PUT', body: buf, headers: { 'Content-Type': contentType } });
+      if (!res.ok) throw await failure(res, 'upload');
+      return 'r2:' + key;
+    },
+    async open(ref) {
+      const res = await client.fetch(urlFor(keyOf(ref)));
+      if (res.status === 404) return null;
+      if (!res.ok) throw await failure(res, 'download');
+      return Readable.fromWeb(res.body);
+    },
+    async remove(refs) {
+      for (const ref of refs.filter(Boolean)) {
+        const res = await client.fetch(urlFor(keyOf(ref)), { method: 'DELETE' }).catch((e) => { console.error('R2 delete failed', e); return null; });
+        if (res && !res.ok && res.status !== 404) console.error('R2 delete failed', res.status);
+      }
+    },
+  };
 }
 
 function diskStore(root) {
@@ -191,7 +266,11 @@ function describeConfig() {
   return {
     environment: process.env.VERCEL_ENV || (process.env.VERCEL ? 'unknown' : 'local'),
     database: databaseUrl() ? '연결 정보 있음' : '연결 정보 없음',
-    photos: blobToken() ? '연결 정보 있음' : '연결 정보 없음',
+    photos: (() => {
+      const r2 = r2Config();
+      if (r2) return r2.missing.length ? `Cloudflare R2 설정 부족 (${r2.missing.join(', ')})` : 'Cloudflare R2';
+      return blobToken() ? 'Vercel Blob' : '연결 정보 없음';
+    })(),
   };
 }
 

@@ -19,16 +19,34 @@
 
 ## Vercel에 배포하기
 
-Vercel은 파일을 저장해 두지 못하므로, **데이터베이스(Neon)** 와 **사진 저장소(Blob)** 를 Vercel 프로젝트에 연결해야 합니다.
+Vercel은 파일을 저장해 두지 못하므로, **데이터베이스(Neon)** 와 **사진 저장소(Cloudflare R2)** 를 연결해야 합니다.
 
-1. Vercel 프로젝트 → **Storage** 탭 → **Create Database** → **Neon (Serverless Postgres)** 를 선택해 만들고 이 프로젝트에 연결합니다.
-   (`DATABASE_URL` 환경 변수가 자동으로 추가됩니다.)
-2. 같은 **Storage** 탭 → **Create** → **Blob** 을 선택해 만들고 이 프로젝트에 연결합니다. 접근 방식을 고를 수 있으면 **Private** 를 선택하세요.
-   (`BLOB_READ_WRITE_TOKEN` 환경 변수가 자동으로 추가됩니다.)
-3. **Deployments** 탭에서 최신 배포의 **⋯ → Redeploy** 를 눌러 다시 배포합니다.
-4. 사이트 주소에 접속해 **가장 먼저 관리자 계정을 만듭니다.** (처음 접속한 사람이 관리자가 됩니다.)
+### 1. 데이터베이스 (Neon)
+Vercel 프로젝트 → **Storage** → **Create Database** → **Neon** 을 만들고 이 프로젝트에 연결합니다.
+Production · Preview · Development 를 모두 체크하세요. (`DATABASE_URL` 이 자동으로 추가됩니다.)
 
-설정 파일은 `vercel.json`, 서버 함수는 `api/index.js` 입니다. 화면 파일은 `public/` 에서 바로 제공됩니다.
+### 2. 사진 저장소 (Cloudflare R2)
+1. Cloudflare 대시보드 → **R2 Object Storage** → **Create bucket** (예: `hwajung-photos`). 공개 설정은 하지 않습니다(비공개 그대로).
+2. R2 화면의 **Manage API tokens** → **Create API token** → 권한 **Object Read & Write**, 대상은 위 버킷으로 지정해 만듭니다.
+   만들어지면 **Access Key ID** 와 **Secret Access Key** 가 한 번만 표시되니 복사해 둡니다.
+3. R2 개요 화면의 **Account ID** 를 복사합니다.
+4. Vercel 프로젝트 → **Settings → Environment Variables** 에 아래 4개를 추가합니다 (Production · Preview 모두).
+
+| 이름 | 값 |
+| --- | --- |
+| `R2_ACCOUNT_ID` | Cloudflare 계정 ID |
+| `R2_ACCESS_KEY_ID` | API 토큰의 Access Key ID |
+| `R2_SECRET_ACCESS_KEY` | API 토큰의 Secret Access Key |
+| `R2_BUCKET` | 버킷 이름 (예: `hwajung-photos`) |
+
+(EU 관할 버킷 등 다른 주소를 쓰는 경우 `R2_ENDPOINT` 로 주소를 직접 지정할 수 있습니다.)
+
+### 3. 다시 배포하고 확인
+**Deployments → ⋯ → Redeploy** 후 `사이트주소/api/health` 에서 `"photos":"Cloudflare R2"` 가 보이면 연결된 것입니다.
+처음 접속해 **관리자 계정을 가장 먼저 만드세요.**
+
+사진은 서버가 본인·관리자인지 확인한 뒤 R2에서 읽어 전달하므로 버킷을 공개할 필요가 없습니다.
+예전에 Vercel Blob에 올린 사진은 `BLOB_READ_WRITE_TOKEN` 이 남아 있는 동안 계속 보이며, 새 사진은 R2에 저장됩니다.
 사진은 휴대폰에서 줄여서 올리며, 한 장 최대 4MB입니다.
 
 ## 내 컴퓨터에서 실행하기
@@ -41,12 +59,13 @@ npm start          # http://localhost:3000
 ```
 
 환경 변수가 없으면 내장 데이터베이스(PGlite)와 사진 폴더를 `DATA_DIR`(기본 `./data`)에 저장합니다.
-`DATABASE_URL`, `BLOB_READ_WRITE_TOKEN` 을 지정하면 Vercel과 같은 저장소를 사용합니다.
+`DATABASE_URL`, `R2_*` 을 지정하면 배포 환경과 같은 저장소를 사용합니다.
 
 | 환경 변수 | 설명 |
 | --- | --- |
 | `DATABASE_URL` (또는 `POSTGRES_URL`) | Postgres 연결 주소 (Neon 등) |
-| `BLOB_READ_WRITE_TOKEN` | Vercel Blob 토큰 |
+| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` | Cloudflare R2 사진 저장소 |
+| `BLOB_READ_WRITE_TOKEN` | (예전) Vercel Blob 토큰 — R2 설정이 없을 때 사용 |
 | `DATA_DIR` | 위 둘이 없을 때 데이터 저장 폴더 (기본 `./data`) |
 | `ADMIN_NAME`, `ADMIN_PIN` | (선택) 첫 관리자 자동 생성 |
 | `PORT` | 서버 포트 (기본 `3000`) |

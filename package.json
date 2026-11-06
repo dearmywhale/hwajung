@@ -13,6 +13,7 @@
   "dependencies": {
     "@electric-sql/pglite": "^0.5.15",
     "@vercel/blob": "^2.8.2",
+    "aws4fetch": "^1.0.20",
     "express": "^4.22.3",
     "multer": "^2.5.0",
     "pg": "^8.23.1"
