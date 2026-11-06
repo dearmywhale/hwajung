@@ -77,6 +77,38 @@
   }
   function go(hash) { if (location.hash === hash) route(); else location.hash = hash; }
 
+  // ---------- 테마 (자동 / 라이트 / 다크) ----------
+  const THEME_KEY = 'hj-theme';
+  const darkQuery = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  function themePref() {
+    try { const v = localStorage.getItem(THEME_KEY); return ['light', 'dark'].includes(v) ? v : 'auto'; } catch (e) { return 'auto'; }
+  }
+  function applyTheme() {
+    const pref = themePref();
+    const dark = pref === 'dark' || (pref === 'auto' && darkQuery && darkQuery.matches);
+    document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', dark ? '#16120b' : '#E9C46A');
+    document.querySelectorAll('[data-theme-set]').forEach((b) => b.classList.toggle('on', b.dataset.themeSet === pref));
+    document.querySelectorAll('[data-theme-toggle]').forEach((b) => { b.textContent = dark ? '☀️ 라이트 모드' : '🌙 다크 모드'; });
+  }
+  function setTheme(pref) {
+    try { if (pref === 'auto') localStorage.removeItem(THEME_KEY); else localStorage.setItem(THEME_KEY, pref); } catch (e) { /* 저장 불가 시 이번 화면에만 적용 */ }
+    applyTheme();
+  }
+  if (darkQuery) {
+    const onChange = () => { if (themePref() === 'auto') applyTheme(); };
+    if (darkQuery.addEventListener) darkQuery.addEventListener('change', onChange); else if (darkQuery.addListener) darkQuery.addListener(onChange);
+  }
+  document.addEventListener('click', (e) => {
+    const set = e.target.closest('[data-theme-set]');
+    if (set) { setTheme(set.dataset.themeSet); return; }
+    if (e.target.closest('[data-theme-toggle]')) {
+      setTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+    }
+  });
+  applyTheme();
+
   // ---------- 모달 ----------
   function openModal(html, { wide, onClose } = {}) {
     const back = document.createElement('div');
@@ -251,7 +283,8 @@
   }
 
   function authCard(inner) {
-    return `<div class="auth-wrap"><div class="auth-card">${BRAND_SVG}
+    setTimeout(applyTheme, 0);
+    return `<div class="auth-theme"><button type="button" class="btn sm" data-theme-toggle></button></div><div class="auth-wrap"><div class="auth-card">${BRAND_SVG}
       <h1 class="auth-title">화정 찬양부</h1><p class="auth-sub">하늘 습관으로 무장하자</p>${inner}</div></div>`;
   }
 
@@ -330,7 +363,14 @@
             <div class="nav-label">설정</div>
             ${link('account', 'PIN 변경')}
           </nav>
-          <div class="side-foot"><button class="btn" id="logout">로그아웃</button></div>
+          <div class="side-foot">
+            <div class="theme-switch" role="group" aria-label="화면 테마">
+              <button type="button" data-theme-set="auto" title="기기 설정을 따릅니다">자동</button>
+              <button type="button" data-theme-set="light">라이트</button>
+              <button type="button" data-theme-set="dark">다크</button>
+            </div>
+            <button class="btn" id="logout">로그아웃</button>
+          </div>
         </aside>
         <div class="backdrop" id="backdrop"></div>
         <div class="main">
@@ -342,6 +382,7 @@
         </div>
       </div>`;
     const layout = document.getElementById('layout');
+    applyTheme();
     document.getElementById('menu').addEventListener('click', () => layout.classList.add('nav-open'));
     document.getElementById('backdrop').addEventListener('click', () => layout.classList.remove('nav-open'));
     document.getElementById('sidebar').addEventListener('click', (e) => { if (e.target.closest('a')) layout.classList.remove('nav-open'); });
@@ -405,7 +446,7 @@
             <div class="msg">${esc(msg)}</div>
           </div>
           <div class="ring" aria-label="오늘 ${n}개 완료">
-            <svg viewBox="0 0 76 76"><circle cx="38" cy="38" r="32" stroke="rgba(58,44,10,.14)" stroke-width="7" fill="none"/>
+            <svg viewBox="0 0 76 76"><circle cx="38" cy="38" r="32" stroke="rgba(58,44,10,.16)" stroke-width="7" fill="none"/>
             <circle cx="38" cy="38" r="32" stroke="#6b4e12" stroke-width="7" fill="none" stroke-linecap="round" stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - n / 3)}"/></svg>
             <div class="num">${n}/3</div>
           </div>
