@@ -187,4 +187,12 @@ function blobStore(token) {
   };
 }
 
-module.exports = { openDatabase, openPhotoStore, ConfigError };
+function describeConfig() {
+  return {
+    environment: process.env.VERCEL_ENV || (process.env.VERCEL ? 'unknown' : 'local'),
+    database: databaseUrl() ? '연결 정보 있음' : '연결 정보 없음',
+    photos: blobToken() ? '연결 정보 있음' : '연결 정보 없음',
+  };
+}
+
+module.exports = { openDatabase, openPhotoStore, ConfigError, describeConfig };

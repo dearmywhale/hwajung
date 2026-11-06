@@ -70,6 +70,12 @@ function createApp(options = {}) {
   const tx = (fn) => state.db.tx(fn);
 
   const api = express.Router();
+  // 배포 확인용: 어떤 버전이 실행 중이고 저장소 연결 정보가 있는지 (값은 보여 주지 않음)
+  api.get('/health', (req, res) => {
+    const { describeConfig } = require('./store');
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({ ok: true, version: (process.env.VERCEL_GIT_COMMIT_SHA || 'local').slice(0, 7), ...describeConfig() });
+  });
   api.use(a(async (req, res, next) => { await ready(); next(); }));
   api.use(express.json({ limit: '100kb' }));
 
